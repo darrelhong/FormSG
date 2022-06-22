@@ -24,6 +24,7 @@ import { EmergencyContactModal } from '~features/user/emergency-contact/Emergenc
 import { useUser } from '~features/user/queries'
 import { WorkspaceContent } from '~features/workspace/WorkspaceContent'
 
+import CreateFormModal from './components/CreateFormModal'
 import { EmptyWorkspace } from './components/EmptyWorkspace'
 import { WorkspaceMenuHeader } from './components/WorkspaceSideMenu/WorkspaceMenuHeader'
 import { WorkspaceMenuTabs } from './components/WorkspaceSideMenu/WorkspaceMenuTabs'
