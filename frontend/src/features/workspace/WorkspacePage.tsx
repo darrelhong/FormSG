@@ -32,7 +32,6 @@ import { useDashboard, useWorkspace } from './queries'
 
 export const WorkspacePage = (): JSX.Element => {
   const [currWorkspaceId, setCurrWorkspaceId] = useState<string>('')
-
   const shouldUseTopMenu = useBreakpointValue({
     base: true,
     xs: true,
