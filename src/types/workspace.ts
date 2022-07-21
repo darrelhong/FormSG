@@ -27,4 +27,9 @@ export interface IWorkspaceModel extends Model<IWorkspaceSchema> {
     workspaceId: IWorkspaceSchema['_id']
     admin: IUserSchema['_id']
   }): Promise<WorkspaceDto | null>
+  deleteWorkspace(
+    workspaceId: IWorkspaceSchema['_id'],
+    admin: IUserSchema['_id'],
+    shouldDeleteForms: boolean,
+  ): Promise<number>
 }
