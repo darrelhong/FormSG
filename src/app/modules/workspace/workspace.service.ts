@@ -65,7 +65,7 @@ export const updateWorkspaceTitle = ({
   userId: string
 }): ResultAsync<WorkspaceDto, DatabaseError | WorkspaceNotFoundError> => {
   return ResultAsync.fromPromise(
-    WorkspaceModel.updateWorkspaceTitle(title, workspaceId, userId),
+    WorkspaceModel.updateWorkspaceTitle({ title, workspaceId, admin: userId }),
     (error) => {
       logger.error({
         message: 'Database error when updating workspace title',
