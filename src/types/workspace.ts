@@ -35,5 +35,5 @@ export interface IWorkspaceModel extends Model<IWorkspaceSchema> {
     workspaceId: IWorkspaceSchema['_id']
     admin: IUserSchema['_id']
     session?: ClientSession
-  }): Promise<void>
+  }): Promise<boolean>
 }
