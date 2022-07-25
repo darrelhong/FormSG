@@ -1,4 +1,4 @@
-import { Document, Model } from 'mongoose'
+import { ClientSession, Document, Model } from 'mongoose'
 import { WorkspaceDto } from 'shared/types/workspace'
 
 import { IFormSchema } from './form'
@@ -27,9 +27,13 @@ export interface IWorkspaceModel extends Model<IWorkspaceSchema> {
     workspaceId: IWorkspaceSchema['_id']
     admin: IUserSchema['_id']
   }): Promise<WorkspaceDto | null>
-  deleteWorkspace(
-    workspaceId: IWorkspaceSchema['_id'],
-    admin: IUserSchema['_id'],
-    shouldDeleteForms: boolean,
-  ): Promise<number>
+  deleteWorkspace({
+    workspaceId,
+    admin,
+    session,
+  }: {
+    workspaceId: IWorkspaceSchema['_id']
+    admin: IUserSchema['_id']
+    session?: ClientSession
+  }): Promise<void>
 }
