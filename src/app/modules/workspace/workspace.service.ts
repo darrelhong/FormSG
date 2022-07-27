@@ -170,15 +170,85 @@ export const deleteForms = (
   return okAsync({ workspaceId: workspaceId, formIds: formIds })
 }
 
-export const moveForms = (
-  sourceWorkspaceId: string,
-  destWorkspaceId: string,
-  formIds: string[],
-): ResultAsync<any, DatabaseError> => {
-  return okAsync({
-    sourceWorkspaceId: sourceWorkspaceId,
-    destWorkspaceId: destWorkspaceId,
-    formIds: formIds,
+export const moveForms = ({
+  userId,
+  sourceWorkspaceId,
+  destWorkspaceId,
+  formIds,
+}: {
+  userId: string
+  sourceWorkspaceId: string
+  destWorkspaceId: string
+  formIds: string[]
+}): ResultAsync<WorkspaceDto | null, DatabaseError> => {
+  return ResultAsync.fromPromise(
+    WorkspaceModel.startSession()
+      .then((session: ClientSession) =>
+        session
+          .withTransaction(() =>
+            moveFormsTransaction({
+              userId,
+              sourceWorkspaceId,
+              destWorkspaceId,
+              formIds,
+              session,
+            }),
+          )
+          .then(() => session.endSession()),
+      )
+      .then(() => WorkspaceModel.getWorkspace(destWorkspaceId, userId)),
+    (error) => {
+      logger.error({
+        message:
+          'Database error when moving forms to another workspace, rolling back transaction',
+        meta: {
+          action: 'moveForms',
+          userId,
+          sourceWorkspaceId,
+          destWorkspaceId,
+          formIds,
+        },
+        error,
+      })
+      return transformMongoError(error)
+    },
+  )
+}
+
+const moveFormsTransaction = async ({
+  userId,
+  sourceWorkspaceId,
+  destWorkspaceId,
+  formIds,
+  session,
+}: {
+  userId: string
+  sourceWorkspaceId: string
+  destWorkspaceId: string
+  formIds: string[]
+  session: ClientSession
+}): Promise<void> => {
+  // Forms could be from multiple different workspaces, or have no workspaces yet
+  if (sourceWorkspaceId === '') {
+    await WorkspaceModel.removeFormIdsFromAllWorkspaces({
+      admin: userId,
+      formIds,
+      session,
+    })
+  } else {
+    await WorkspaceModel.removeFormIdsFromWorkspace({
+      admin: userId,
+      workspaceId: sourceWorkspaceId,
+      formIds,
+      session,
+    })
+  }
+
+  await WorkspaceModel.addFormIdsToWorkspace({
+    admin: userId,
+    workspaceId: destWorkspaceId,
+    formIds,
+    session,
   })
 }
 

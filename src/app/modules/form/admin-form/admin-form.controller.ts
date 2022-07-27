@@ -5,6 +5,7 @@ import { AuthedSessionData } from 'express-session'
 import { StatusCodes } from 'http-status-codes'
 import JSONStream from 'JSONStream'
 import { ResultAsync } from 'neverthrow'
+import { WorkspaceDto } from 'shared/types/workspace'
 
 import {
   MAX_UPLOAD_FILE_SIZE,
@@ -79,6 +80,8 @@ import {
   extractEmailConfirmationDataFromIncomingSubmission,
 } from '../../submission/submission.utils'
 import * as UserService from '../../user/user.service'
+import * as WorkspaceService from '../../workspace/workspace.service'
+import { mapRouteError as mapWorkspacesError } from '../../workspace/workspace.utils'
 import { PrivateFormError } from '../form.errors'
 import * as FormService from '../form.service'
 
@@ -2694,3 +2697,58 @@ export const handleUpdateTwilio = [
   validateTwilioCredentials,
   updateTwilioCredentials,
 ] as ControllerHandler[]
+
+/**
+ * Handler for POST /forms/move.
+ * @security session
+ *
+ * @returns 200 with the destination workspace
+ * @returns 401 when user does not exist in session
+ * @returns 403 when user does not have permissions to update the form's workspace
+ * @returns 404 when the destWorkspaceId is not found in the database
+ * @returns 500 when a database error occurs
+ */
+export const updateFormsWorkspace: ControllerHandler<
+  unknown,
+  WorkspaceDto | ErrorDto,
+  { destWorkspaceId: string; formIds: string[] }
+> = (req, res) => {
+  const { formIds, destWorkspaceId } = req.body
+  const userId = (req.session as AuthedSessionData).user._id
+
+  return WorkspaceService.checkWorkspaceExists(destWorkspaceId)
+    .andThen(() =>
+      WorkspaceService.verifyWorkspaceAdmin(destWorkspaceId, userId),
+    )
+    .andThen(() =>
+      WorkspaceService.moveForms({
+        userId,
+        sourceWorkspaceId: '',
+        destWorkspaceId,
+        formIds,
+      }),
+    )
+    .map((workspace) =>
+      workspace
+        ? res.status(StatusCodes.OK).json(workspace)
+        : res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            message:
+              'Sorry something went wrong, we are unable to move the forms to another worksapce',
+          }),
+    )
+    .mapErr((error) => {
+      logger.error({
+        message: 'Error occurred when updating form workspace',
+        meta: {
+          action: 'updateFormWorkspace',
+          destWorkspaceId,
+          userId,
+          formIds,
+        },
+        error,
+      })
+
+      const { errorMessage, statusCode } = mapWorkspacesError(error)
+      return res.status(statusCode).json({ message: errorMessage })
+    })
+}

@@ -211,3 +211,16 @@ AdminFormsFormRouter.get(
   '/:formId([a-fA-F0-9]{24})/verified-sms/count/free',
   AdminFormController.handleGetFreeSmsCountForFormAdmin,
 )
+
+/**
+ * Updates the workspace that the forms belong to. The workspaces of the forms will be updated to the
+ * workspace with the destWorkspaceId.
+ * @security session
+ *
+ * @returns 200 with the destination workspace
+ * @returns 401 when user does not exist in session
+ * @returns 403 when user does not have permissions to update the workspace
+ * @returns 404 when the destWorkspaceId is not found in the database
+ * @returns 500 when a database error occurs
+ */
+AdminFormsFormRouter.post('/move', AdminFormController.updateFormsWorkspace)
