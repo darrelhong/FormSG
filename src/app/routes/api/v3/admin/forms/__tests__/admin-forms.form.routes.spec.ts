@@ -10,11 +10,17 @@ import getFormModel, {
   getEncryptedFormModel,
 } from 'src/app/models/form.server.model'
 import getUserModel from 'src/app/models/user.server.model'
+import { getWorkspaceModel } from 'src/app/models/workspace.server.model'
 import * as AuthService from 'src/app/modules/auth/auth.service'
 import {
   DatabaseError,
   DatabasePayloadSizeError,
 } from 'src/app/modules/core/core.errors'
+import {
+  ForbiddenWorkspaceError,
+  WorkspaceNotFoundError,
+} from 'src/app/modules/workspace/workspace.errors'
+import { formatErrorRecoveryMessage } from 'src/app/utils/handle-mongo-error'
 import { IPopulatedForm, IUserSchema } from 'src/types'
 
 import {
@@ -54,10 +60,12 @@ const UserModel = getUserModel(mongoose)
 const FormModel = getFormModel(mongoose)
 const EmailFormModel = getEmailFormModel(mongoose)
 const EncryptFormModel = getEncryptedFormModel(mongoose)
+const WorkspaceModel = getWorkspaceModel(mongoose)
 
 const app = setupApp('/admin/forms', AdminFormsRouter, {
   setupWithAuth: true,
 })
+const MOCK_USER_ID = new ObjectId()
 
 describe('admin-form.form.routes', () => {
   let request: Session
@@ -66,7 +74,9 @@ describe('admin-form.form.routes', () => {
   beforeAll(async () => await dbHandler.connect())
   beforeEach(async () => {
     request = supertest(app)
-    const { user } = await dbHandler.insertFormCollectionReqs()
+    const { user } = await dbHandler.insertFormCollectionReqs({
+      userId: MOCK_USER_ID,
+    })
     // Default all requests to come from authenticated user.
     request = await createAuthedSession(user.email, request)
     defaultUser = user
@@ -2211,6 +2221,140 @@ describe('admin-form.form.routes', () => {
           },
         }),
       )
+    })
+  })
+
+  describe('POST /forms/move', () => {
+    const MOVE_FORM_WORKSPACE_ENDPOINT = `/admin/forms/move`
+    const MOCK_FORM_ID = new ObjectId()
+    const MOCK_WORKSPACE_ID = new ObjectId()
+    const MOCK_WORKSPACE_DOC = {
+      _id: MOCK_WORKSPACE_ID,
+      title: 'Workspace1',
+      admin: MOCK_USER_ID,
+      formIds: [MOCK_FORM_ID],
+    }
+    const mockDestWorkspaceId = new ObjectId()
+    const mockDestWorkspaceDoc = {
+      _id: mockDestWorkspaceId,
+      title: 'destWorkspace',
+      admin: MOCK_USER_ID,
+      formIds: [],
+    }
+
+    beforeEach(async () => {
+      await WorkspaceModel.create(MOCK_WORKSPACE_DOC)
+      await WorkspaceModel.create(mockDestWorkspaceDoc)
+      jest
+        .spyOn(WorkspaceModel, 'removeFormIdsFromAllWorkspaces')
+        .mockImplementationOnce(({ admin, formIds }) =>
+          WorkspaceModel.removeFormIdsFromAllWorkspaces({
+            admin,
+            formIds,
+          }),
+        )
+      jest
+        .spyOn(WorkspaceModel, 'addFormIdsToWorkspace')
+        .mockImplementationOnce(({ admin, workspaceId, formIds }) =>
+          WorkspaceModel.addFormIdsToWorkspace({
+            admin,
+            workspaceId,
+            formIds,
+          }),
+        )
+    })
+    afterEach(async () => {
+      await dbHandler.clearDatabase()
+      jest.clearAllMocks()
+    })
+
+    it('should return 200 with destination workspace on successful update of form workspace', async () => {
+      const updateFormWorkspaceParams = {
+        destWorkspaceId: mockDestWorkspaceId.toHexString(),
+        formIds: [MOCK_FORM_ID.toHexString()],
+      }
+
+      const response = await request
+        .post(MOVE_FORM_WORKSPACE_ENDPOINT)
+        .send(updateFormWorkspaceParams)
+      const expected = {
+        title: mockDestWorkspaceDoc.title,
+        admin: MOCK_USER_ID.toHexString(),
+        formIds: [MOCK_FORM_ID.toHexString()],
+      }
+
+      expect(response.status).toEqual(200)
+      expect(response.body).toMatchObject(expected)
+    })
+
+    it('should return 401 when user is not logged in', async () => {
+      await logoutSession(request)
+      const response = await request.post(MOVE_FORM_WORKSPACE_ENDPOINT)
+
+      expect(response.status).toEqual(401)
+      expect(response.body).toEqual({ message: 'User is unauthorized.' })
+    })
+
+    it('should return 403 when user does not have permission to edit the destination workspace', async () => {
+      const otherWorkspace = {
+        _id: new ObjectId(),
+        title: 'Workspace1',
+        admin: new ObjectId(),
+        formIds: [],
+      }
+      await WorkspaceModel.create(otherWorkspace)
+
+      const updateFormWorkspaceParams = {
+        destWorkspaceId: otherWorkspace._id.toHexString(),
+        formIds: [MOCK_FORM_ID.toHexString()],
+      }
+
+      const response = await request
+        .post(MOVE_FORM_WORKSPACE_ENDPOINT)
+        .send(updateFormWorkspaceParams)
+
+      expect(response.status).toEqual(403)
+      expect(response.body).toEqual({
+        message: new ForbiddenWorkspaceError().message,
+      })
+    })
+
+    it('should return 404 when destination workspace does not exist', async () => {
+      const nonExistentWorkspaceId = new ObjectId()
+
+      const updateFormWorkspaceParams = {
+        destWorkspaceId: nonExistentWorkspaceId.toHexString(),
+        formIds: [MOCK_FORM_ID.toHexString()],
+      }
+
+      const response = await request
+        .post(MOVE_FORM_WORKSPACE_ENDPOINT)
+        .send(updateFormWorkspaceParams)
+
+      expect(response.status).toEqual(404)
+      expect(response.body).toEqual({
+        message: new WorkspaceNotFoundError().message,
+      })
+    })
+
+    it('should return 500 when database errors occur', async () => {
+      const updateFormWorkspaceParams = {
+        destWorkspaceId: mockDestWorkspaceId.toHexString(),
+        formIds: [],
+      }
+
+      const mockErrorMessage = 'something went wrong'
+      jest
+        .spyOn(WorkspaceModel, 'removeFormIdsFromAllWorkspaces')
+        .mockRejectedValueOnce(new Error(mockErrorMessage))
+      const response = await request
+        .post(MOVE_FORM_WORKSPACE_ENDPOINT)
+        .send(updateFormWorkspaceParams)
+
+      expect(response.status).toEqual(500)
+      expect(response.body).toEqual({
+        message: formatErrorRecoveryMessage(mockErrorMessage),
+      })
     })
   })
 })

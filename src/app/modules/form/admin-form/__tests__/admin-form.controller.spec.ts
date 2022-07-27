@@ -37,6 +37,11 @@ import * as SubmissionUtils from 'src/app/modules/submission/submission.utils'
 import { MissingUserError } from 'src/app/modules/user/user.errors'
 import { SmsLimitExceededError } from 'src/app/modules/verification/verification.errors'
 import {
+  ForbiddenWorkspaceError,
+  WorkspaceNotFoundError,
+} from 'src/app/modules/workspace/workspace.errors'
+import * as WorkspaceService from 'src/app/modules/workspace/workspace.service'
+import {
   MailGenerationError,
   MailSendError,
 } from 'src/app/services/mail/mail.errors'
@@ -56,6 +61,7 @@ import {
   IPopulatedForm,
   IPopulatedUser,
   IUserSchema,
+  IWorkspaceSchema,
   PublicForm,
 } from 'src/types'
 import { EditFormFieldParams, EncryptSubmissionDto } from 'src/types/api'
@@ -144,6 +150,9 @@ jest.mock('src/app/services/mail/mail.service')
 const MockMailService = mocked(MailService)
 jest.mock('../../../../services/sms/sms.service')
 const MockSmsService = mocked(SmsService)
+
+jest.mock('src/app/modules/workspace/workspace.service')
+const MockWorkspaceService = mocked(WorkspaceService)
 
 describe('admin-form.controller', () => {
   beforeEach(() => jest.clearAllMocks())
@@ -10953,6 +10962,120 @@ describe('admin-form.controller', () => {
         message: expectedErrorString,
       })
       expect(deleteTwilioSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('updateFormsWorkspace', () => {
+    const MOCK_REQ = expressHandler.mockRequest({
+      session: {
+        user: {
+          _id: 'exists',
+        },
+      },
+      body: {
+        formIds: [new ObjectId().toHexString()],
+        destWorkspaceId: new ObjectId() as IWorkspaceSchema['_id'],
+      },
+    })
+    const MOCK_WORKSPACE = {
+      _id: new ObjectId() as IWorkspaceSchema['_id'],
+      title: 'Workspace1',
+      admin: new ObjectId() as IUserSchema['_id'],
+      formIds: [],
+      count: 0,
+    }
+
+    it('should return 200 with success message', async () => {
+      const mockRes = expressHandler.mockResponse()
+      MockWorkspaceService.checkWorkspaceExists.mockReturnValue(okAsync(true))
+      MockWorkspaceService.verifyWorkspaceAdmin.mockReturnValue(okAsync(true))
+      MockWorkspaceService.moveForms.mockReturnValueOnce(
+        okAsync(MOCK_WORKSPACE),
+      )
+
+      await AdminFormController.updateFormsWorkspace(
+        MOCK_REQ,
+        mockRes,
+        jest.fn(),
+      )
+
+      expect(mockRes.json).toHaveBeenCalledWith(MOCK_WORKSPACE)
+    })
+
+    it('should return 403 when workspace is not found', async () => {
+      const mockRes = expressHandler.mockResponse()
+      const mockErrorString = 'something went wrong'
+
+      MockWorkspaceService.checkWorkspaceExists.mockReturnValue(okAsync(true))
+      MockWorkspaceService.verifyWorkspaceAdmin.mockReturnValue(
+        errAsync(new ForbiddenWorkspaceError(mockErrorString)),
+      )
+
+      await AdminFormController.updateFormsWorkspace(
+        MOCK_REQ,
+        mockRes,
+        jest.fn(),
+      )
+
+      expect(mockRes.status).toBeCalledWith(403)
+      expect(mockRes.json).toBeCalledWith({ message: mockErrorString })
+    })
+
+    it('should return 404 when workspace is not found', async () => {
+      const mockRes = expressHandler.mockResponse()
+      const mockErrorString = 'something went wrong'
+
+      MockWorkspaceService.checkWorkspaceExists.mockReturnValue(
+        errAsync(new WorkspaceNotFoundError(mockErrorString)),
+      )
+      MockWorkspaceService.verifyWorkspaceAdmin.mockReturnValue(okAsync(true))
+
+      await AdminFormController.updateFormsWorkspace(
+        MOCK_REQ,
+        mockRes,
+        jest.fn(),
+      )
+
+      expect(mockRes.status).toBeCalledWith(404)
+      expect(mockRes.json).toBeCalledWith({ message: mockErrorString })
+    })
+
+    it('should return 409 when database conflict occurs', async () => {
+      const mockRes = expressHandler.mockResponse()
+      const mockErrorString = 'something went wrong'
+
+      MockWorkspaceService.checkWorkspaceExists.mockReturnValue(okAsync(true))
+      MockWorkspaceService.verifyWorkspaceAdmin.mockReturnValue(okAsync(true))
+      MockWorkspaceService.moveForms.mockReturnValueOnce(
+        errAsync(new DatabaseConflictError(mockErrorString)),
+      )
+      await AdminFormController.updateFormsWorkspace(
+        MOCK_REQ,
+        mockRes,
+        jest.fn(),
+      )
+
+      expect(mockRes.status).toBeCalledWith(409)
+      expect(mockRes.json).toBeCalledWith({ message: mockErrorString })
+    })
+
+    it('should return 500 when database error occurs', async () => {
+      const mockRes = expressHandler.mockResponse()
+      const mockErrorString = 'something went wrong'
+
+      MockWorkspaceService.checkWorkspaceExists.mockReturnValue(okAsync(true))
+      MockWorkspaceService.verifyWorkspaceAdmin.mockReturnValue(okAsync(true))
+      MockWorkspaceService.moveForms.mockReturnValueOnce(
+        errAsync(new DatabaseError(mockErrorString)),
+      )
+      await AdminFormController.updateFormsWorkspace(
+        MOCK_REQ,
+        mockRes,
+        jest.fn(),
+      )
+
+      expect(mockRes.status).toBeCalledWith(500)
+      expect(mockRes.json).toBeCalledWith({ message: mockErrorString })
     })
   })
 })
