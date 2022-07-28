@@ -72,7 +72,6 @@ describe('workspace.service', () => {
         admin: 'user' as UserId,
         title: 'workspace1',
         formIds: [] as FormId[],
-        count: 0,
       }
 
       const createSpy = jest
@@ -136,7 +135,6 @@ describe('workspace.service', () => {
       admin: 'user' as UserId,
       title: 'workspace1',
       formIds: [] as FormId[],
-      count: 0,
     }
 
     it('should successfully update workspace title', async () => {
@@ -149,11 +147,11 @@ describe('workspace.service', () => {
         userId: mockWorkspace.admin,
       })
 
-      expect(updateSpy).toHaveBeenCalledWith(
-        mockWorkspace.title,
-        mockWorkspace._id,
-        mockWorkspace.admin,
-      )
+      expect(updateSpy).toHaveBeenCalledWith({
+        workspaceId: mockWorkspace._id,
+        title: mockWorkspace.title,
+        admin: mockWorkspace.admin,
+      })
       expect(actual.isOk()).toEqual(true)
       expect(actual._unsafeUnwrap()).toEqual(mockWorkspace)
     })
@@ -170,11 +168,11 @@ describe('workspace.service', () => {
         userId: mockWorkspace.admin,
       })
 
-      expect(updateSpy).toHaveBeenCalledWith(
-        mockWorkspace.title,
-        mockWorkspace._id,
-        mockWorkspace.admin,
-      )
+      expect(updateSpy).toHaveBeenCalledWith({
+        workspaceId: mockWorkspace._id,
+        title: mockWorkspace.title,
+        admin: mockWorkspace.admin,
+      })
       expect(actual._unsafeUnwrapErr()).toBeInstanceOf(DatabaseValidationError)
     })
 
@@ -189,11 +187,11 @@ describe('workspace.service', () => {
         userId: mockWorkspace.admin,
       })
 
-      expect(updateSpy).toHaveBeenCalledWith(
-        mockWorkspace.title,
-        mockWorkspace._id,
-        mockWorkspace.admin,
-      )
+      expect(updateSpy).toHaveBeenCalledWith({
+        workspaceId: mockWorkspace._id,
+        title: mockWorkspace.title,
+        admin: mockWorkspace.admin,
+      })
       expect(actual._unsafeUnwrapErr()).toBeInstanceOf(WorkspaceNotFoundError)
     })
 
@@ -209,11 +207,11 @@ describe('workspace.service', () => {
         userId: mockWorkspace.admin,
       })
 
-      expect(updateSpy).toHaveBeenCalledWith(
-        mockWorkspace.title,
-        mockWorkspace._id,
-        mockWorkspace.admin,
-      )
+      expect(updateSpy).toHaveBeenCalledWith({
+        workspaceId: mockWorkspace._id,
+        title: mockWorkspace.title,
+        admin: mockWorkspace.admin,
+      })
       expect(actual.isErr()).toEqual(true)
       expect(actual._unsafeUnwrapErr()).toEqual(
         new DatabaseError(formatErrorRecoveryMessage(mockErrorMessage)),
